@@ -415,8 +415,8 @@ $testFiles = array('250MB', '500MB', '1GB');
 
 You can customize the logo and background image by replacing the following files in the same directory as the script:
 
-1.  **Logo**: `logo-new.webp` (Recommended height: ~36px)
-2.  **Background**: `hero-min.webp` (Background for the header, recommended compressed webp format)
+1.  **Logo**: `logo-lg.webp` (Recommended height: ~36px)
+2.  **Background**: `hero-lg.webp` (Background for the header, recommended compressed webp format)
 
 Ensure these files are accessible by the web server user.
 

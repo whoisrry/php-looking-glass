@@ -245,8 +245,8 @@ $testFiles = array('250MB', '500MB', '1GB');
 
 Ganti logo dan gambar latar dengan mengganti file berikut di direktori yang sama dengan script:
 
-1. **Logo**: `logo-new.webp` (Tinggi yang disarankan: ~36px)  
-2. **Background**: `hero-min.webp` (Background untuk header, disarankan menggunakan format webp dan dikompresi)
+1. **Logo**: `logo-lg.webp` (Tinggi yang disarankan: ~36px)  
+2. **Background**: `hero-lg.webp` (Background untuk header, disarankan menggunakan format webp dan dikompresi)
 
 Pastikan file dapat diakses oleh user web server.
 
