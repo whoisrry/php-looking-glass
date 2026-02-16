@@ -326,7 +326,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 	// Keywords array (manageable)
 	$keywords = [
 		'looking glass', 'network diagnostics', 'ping', 'traceroute', 'mtr', 'host',
-		'ipv6', 'ipv4', 'network tools', 'alsyundawy', 'orion',
+		'ipv6', 'ipv4', 'network tools', 'alsyundawy',
 	];
 	$metaKeywords = implode(', ', $keywords);
 
@@ -358,7 +358,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 	<meta property="og:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>" />
 	<meta property="og:url" content="<?= $canonical ?>" />
 	<meta property="og:site_name" content="<?= $siteNameSafe ?> Network Tools" />
-	<meta property="og:image" content="<?= $siteUrlSafe ?>/assets/social-share-image.png" />
+	<meta property="og:image" content="<?= $siteUrlSafe ?>/social-share-image.png" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 
@@ -366,7 +366,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 	<meta name="twitter:card" content="summary_large_image">
 	<meta name="twitter:title" content="<?= $siteNameSafe ?> — Looking Glass">
 	<meta name="twitter:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
-	<meta name="twitter:image" content="<?= $siteUrlSafe ?>/assets/social-share-image.png">
+	<meta name="twitter:image" content="<?= $siteUrlSafe ?>/social-share-image.png">
 
 	<!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -480,7 +480,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 				'Ping', 'Traceroute', 'MTR', 'Host'
 			],
 			'keywords' => $keywords,
-			'screenshot' => $siteUrlSafe . '/assets/screenshot.png'
+			'screenshot' => $siteUrlSafe . '/screenshot.png'
 		];
 
 		$websiteSchema = [
@@ -496,7 +496,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 				'url' => 'https://alsyundawy.com',
 				'logo' => [
 					'@type' => 'ImageObject',
-					'url' => 'https://alsyundawy.com/assets/logo.png',
+					'url' => 'https://alsyundawy.com/logo.png',
 					'width' => 200,
 					'height' => 200
 				],
@@ -530,7 +530,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 			'@type' => 'Organization',
 			'name' => 'ALSYUNDAWY IT SOLUTION',
 			'url' => 'https://alsyundawy.com',
-			'logo' => 'https://alsyundawy.com/assets/logo.png',
+			'logo' => 'https://alsyundawy.com/logo.png',
 			'sameAs' => [
 				'https://alsyundawy.com',
 				'https://www.peeringdb.com/asn/696969',
@@ -972,7 +972,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
                                 SUTISNA ALSYUNDAWY</a></p>
                     </div>
                     <div class="col-md-6 text-md-end">
-                        <p>COPYLEFT © 2025 Orion Looking Glass Network Tools. HAK CIPTA DILINDUNGI.</p>
+                        <p>COPYLEFT © 2025 alsyundawy Looking Glass Network Tools. HAK CIPTA DILINDUNGI.</p>
 						<p>
 							INFO:
 							<a href="https://stat.ripe.net/AS696969" target="_blank" rel="noopener">RIPESTAT</a> |
