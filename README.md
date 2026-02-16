@@ -472,3 +472,6 @@ dd if=/dev/zero of=1GB.bin bs=1M count=1024 status=progress
 ## License
 
 ## MIT License. Copyright (c) 2026 Alsyundawy IT Solution.
+
+![Alt](https://repobeats.axiom.co/api/embed/78ddb5f1a231029b742cc467a74bcce400941d0f.svg "Repobeats analytics image")
+
