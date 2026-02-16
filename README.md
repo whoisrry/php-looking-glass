@@ -20,6 +20,7 @@ A professional, lightweight, single-file PHP Looking Glass tool designed for net
 ## Requirements
 
 - **PHP**: Version 8.1 or higher.
+- **PHP Modules**: `php-cli`, `php-common`, `php-fpm` (if using Nginx), `php-json`, `php-mbstring`, `php-xml`.
 - **Web Server**: Nginx or Apache.
 - **System Utilities**: The web server user must be able to execute the following commands:
   - `ping`
@@ -37,12 +38,12 @@ A professional, lightweight, single-file PHP Looking Glass tool designed for net
 **Debian/Ubuntu:**
 ```bash
 sudo apt-get update
-sudo apt-get install php-cli php-fpm ping traceroute mtr-tiny iperf3 dnsutils -y
+sudo apt-get install php-cli php-fpm php-json php-common php-mbstring php-xml ping traceroute mtr-tiny iperf3 dnsutils -y
 ```
 
 **CentOS/RHEL/AlmaLinux:**
 ```bash
-sudo dnf install php-cli php-fpm iputils traceroute mtr iperf3 bind-utils -y
+sudo dnf install php-cli php-fpm php-json php-common php-mbstring php-xml iputils traceroute mtr iperf3 bind-utils -y
 ```
 
 ### 2. Deployment
