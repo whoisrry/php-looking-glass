@@ -1,0 +1,1034 @@
+<?php
+/**
+ * ========================================================================
+ * ALSYUNDAWY - LOOKING GLASS NETWORK DIAGNOSTIC TOOLS
+ * ========================================================================
+ * 
+ * @package     : Alsyundawy Looking Glass
+ * @version     : 1.0.0 (Initial Release)
+ * @author      : Harry Dertin Sutisna Alsyundawy <alsyundawy@gmail.com>
+ * @copyright   : Copyleft 2026 Alsyundawy IT Solution
+ * @license     : MIT License
+ * @link        : https://github.com/alsyundawy/alsyundawy-looking-glass
+ * @created     : February 16, 2026
+ * 
+ * DESCRIPTION:
+ * A professional, lightweight, single-file PHP Looking Glass tool designed for 
+ * network diagnostics. Fully compatible with IPv4 and IPv6, featuring a modern, 
+ * responsive UI (Dark/Light mode) and utilizing standard system utilities.
+ * 
+ * FEATURES:
+ * [1] Network Diagnostics:
+ *     - Ping (ICMP)
+ *     - Traceroute (Path Analysis)
+ *     - MTR (My Traceroute - Real-time packet loss analysis)
+ *     - Host (DNS Lookup / A & AAAA Records)
+ * 
+ * [2] Performance Testing:
+ *     - Iperf3 Integration (TCP/UDP, Reverse Mode)
+ *     - File Download Tests (Customizable sizes)
+ *     - Speedtest & Repository Links
+ * 
+ * [3] Interface & Usability:
+ *     - 100% Responsive Design (Mobile to 4K support)
+ *     - Dark/Light Theme Toggle
+ *     - Real-time Client IP Detection
+ *     - Server Information Display
+ * 
+ * [4] Security & Deployment:
+ *     - Single PHP File ( No Database Required )
+ *     - Input Sanitization (Prevents Command Injection)
+ *     - Easy Configuration via top-of-script variables
+ * 
+ * REQUIREMENTS:
+ * - PHP 8.1 or higher
+ * - Web Server (Nginx or Apache)
+ * - System Utilities: ping, traceroute, mtr, iperf3, host
+ *   (Ensure these are installed and accessible by the web server user)
+ * 
+ * CHANGELOG:
+ * 
+ * v1.0.0 - 2026-02-16
+ *   - Initial Release.
+ *   - Full Looking Glass functionality with optimized 3-column layout.
+ *   - Integrated Iperf3 and Download Test features.
+ * 
+ * ========================================================================
+ */
+
+declare(strict_types=1);
+
+function error_die(string $title, string $message): never
+{
+    http_response_code(500);
+    if (php_sapi_name() === 'cli') {
+        die("$title\n$message\n");
+    } else {
+        $html = '<div style="font-family: sans-serif; padding: 20px; border: 2px solid red; margin: 20px;">' .
+            '<strong>' . htmlspecialchars($title) . '</strong><br>' .
+            htmlspecialchars($message) . '</div>';
+        die($html);
+    }
+}
+
+if (version_compare(PHP_VERSION, '8.1.0', '<')) {
+    error_die(
+        'Error: PHP Version Mismatch.',
+        'This script requires PHP 8.1.0 or newer. You are using ' . PHP_VERSION . '.'
+    );
+}
+
+$required_extensions = ['filter', 'openssl', 'mbstring', 'json', 'curl'];
+$missing_extensions = array_filter($required_extensions, fn($ext) => !extension_loaded($ext));
+
+if (!empty($missing_extensions)) {
+    error_die(
+        'Error: Required PHP Extensions Missing.',
+        'The following extensions must be enabled: ' . implode(', ', $missing_extensions) . '.'
+    );
+}
+
+$required_functions = ['proc_open', 'proc_get_status', 'proc_close', 'stream_get_contents'];
+$disabled_functions = array_map('trim', explode(',', ini_get('disable_functions') ?? ''));
+$missing_functions = array_filter(
+    $required_functions,
+    fn($func) => !function_exists($func) || in_array($func, $disabled_functions, true)
+);
+
+if (!empty($missing_functions)) {
+    error_die(
+        'Error: Required PHP Functions Disabled.',
+        'The following functions are required and currently disabled or missing: ' . implode(', ', $missing_functions) . '.'
+    );
+}
+
+// PHP optimization for 16-core, RAM 24 GB
+ini_set('realpath_cache_size', '8192k');    // 8 MB cache path
+ini_set('realpath_cache_ttl', '1200');      // 10 minutes
+ini_set('opcache.enable', '1');
+ini_set('opcache.memory_consumption', '1024');      // 768 MB for compiled code
+ini_set('opcache.max_accelerated_files', '30000');  // max file limit for large application
+ini_set('opcache.interned_strings_buffer', '32');   // 32 MB for interned strings
+ini_set('opcache.fast_shutdown', '1');
+ini_set('opcache.validate_timestamps', '0');        // disable stat-check in prod; manual reload if needed
+ini_set('opcache.revalidate_freq', '60');       // check files every 60 seconds if timestamps are enabled
+
+
+ini_set('session.cookie_httponly', '1');
+ini_set('session.use_strict_mode', '1');
+ini_set('session.cookie_samesite', 'Strict');
+session_name("LG_SID");
+
+$cookie_domain = $_SERVER["HTTP_HOST"] ?? '';
+if ($cookie_domain === 'localhost' || filter_var($cookie_domain, FILTER_VALIDATE_IP) || strpos($cookie_domain, '.') === false) {
+    $cookie_domain = '';
+} elseif (strpos($cookie_domain, '.') !== 0) {
+    $cookie_domain = '.' . $cookie_domain;
+}
+
+session_set_cookie_params([
+    'lifetime' => 3600,
+    'path' => '/',
+    'domain' => $cookie_domain,
+    'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (empty($_SESSION['csrf'])) {
+    try {
+        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    } catch (Exception $e) {
+        http_response_code(500);
+        error_log("Failed to generate CSRF token: " . $e->getMessage());
+        die('Internal server error: Failed to create security token.');
+    }
+}
+$csrf_token = $_SESSION['csrf'];
+
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: DENY");
+header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header("Strict-Transport-Security: max-age=31536000; includeSubDomains");
+}
+
+// Hardcoded Looking Glass Tools Configuration
+$ipv4 = 'lg.yourdomain.com';
+$ipv6 = 'lg.yourdomain.com';
+$siteName = 'LOOKING GLASS NETWORK TOOLS';
+$siteUrl = 'https://lg.yourdomain.com';
+$siteUrlv4 = 'https://lg.yourdomain.com';
+$siteUrlv6 = 'https://lg.yourdomain.com';
+$serverLocation = 'JAKARTA - INDONESIA';
+// Iperf Port
+$iperfport = '5201';
+// Test files
+$testFiles = array('250MB', '500MB', '1GB');
+
+
+// ============================================================================
+
+
+function sanitize_output(mixed $output): string
+{
+    $output = (string) $output;
+    return htmlspecialchars($output, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
+function validate_host(string $host): bool
+{
+    $sanitized_host = preg_replace('/[^\pL\pM\pN\-._:]/u', '', $host);
+    if ($host !== $sanitized_host)
+        return false;
+    if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        return true;
+    }
+    return (
+        preg_match('/^([a-zA-Z0-9\-\pL\pM]+\.)+[a-zA-Z\pL\pM]{2,}$/u', $host) &&
+        strlen($host) <= 253
+    );
+}
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    header('Content-Type: text/plain; charset=utf-8');
+    header('X-Accel-Buffering: no'); // Disable Nginx buffering
+    header('Content-Encoding: none'); // Disable compression for streaming
+
+    $host = trim($_POST['host'] ?? '');
+    $cmd = trim($_POST['cmd'] ?? '');
+
+    if (empty($host) || !validate_host($host)) {
+        http_response_code(400);
+        echo "Error: Invalid host or IP address.\nValid examples: 8.8.8.8, 2001:4860:4860::8888, or google.com";
+        exit;
+    }
+
+    $command_map = [
+        'host' => (empty($host_cmd) ? 'host -W 1 %s' : ''),
+        'mtr' => (empty($mtr) ? 'mtr -4 -c 10 -w -b %s' : ''),
+        'mtr6' => (empty($mtr) ? 'mtr -6 -c 10 -w -b %s' : ''),
+        'ping' => (empty($ping) ? 'ping -4 -c 20 -w 25 %s' : ''),
+        'ping6' => (empty($ping) ? 'ping -6 -c 20 -w 25 %s' : ''),
+        'traceroute' => (empty($traceroute) ? 'traceroute -4 -w 1 -q 1 -m 30 %s' : ''),
+        'traceroute6' => (empty($traceroute) ? 'traceroute -6 -w 1 -q 1 -m 30 %s' : ''),
+    ];
+
+    if (!array_key_exists($cmd, $command_map) || empty($command_map[$cmd])) {
+        http_response_code(400);
+        echo "Error: Command not recognized or disabled.";
+        exit;
+    }
+
+    $full_command = sprintf($command_map[$cmd], escapeshellarg($host));
+
+    echo "=======================================================================\n";
+    echo "|| Menjalankan: " . sanitize_output($cmd) . " " . sanitize_output($host) . "\n";
+    echo "|| Dari Server: " . sanitize_output($serverLocation);
+    echo "\n=======================================================================\n\n";
+
+    // Disable output buffering
+    if (ob_get_level())
+        ob_end_clean();
+    flush();
+
+    $descriptorspec = [0 => ["pipe", "r"], 1 => ["pipe", "w"], 2 => ["pipe", "w"]];
+    $process = proc_open($full_command, $descriptorspec, $pipes);
+
+    if (is_resource($process)) {
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $timeout = 30; // 30 seconds timeout
+        $start_time = time();
+
+        while (true) {
+            $read = [$pipes[1], $pipes[2]];
+            $write = null;
+            $except = null;
+
+            if (stream_select($read, $write, $except, 1) > 0) {
+                foreach ($read as $pipe) {
+                    $output = fread($pipe, 8192);
+                    if ($output !== false && strlen($output) > 0) {
+                        echo sanitize_output($output);
+                        flush();
+                    }
+                }
+            }
+
+            $status = proc_get_status($process);
+            if (!$status['running']) {
+                // Process finished, read remaining output
+                $output = stream_get_contents($pipes[1]);
+                if ($output !== false && strlen($output) > 0)
+                    echo sanitize_output($output);
+
+                $stderr = stream_get_contents($pipes[2]);
+                if ($stderr !== false && strlen($stderr) > 0)
+                    echo "\n--- [STDERR] ---\n" . sanitize_output($stderr);
+
+                break;
+            }
+
+            if ((time() - $start_time) > $timeout) {
+                proc_terminate($process, 9);
+                echo "\n\n=======================================================================\n";
+                echo "|| Error: Proses melampaui batas waktu (30 detik) dan telah dihentikan.\n";
+                echo "=======================================================================\n";
+                break;
+            }
+        }
+
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($process);
+    } else {
+        http_response_code(500);
+        echo "Error: Gagal mengeksekusi perintah pada server.";
+    }
+    exit;
+}
+
+$theme = "dark";
+if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], true)) {
+    $theme = $_COOKIE['theme'];
+}
+?><!DOCTYPE html>
+<html lang="id" data-theme="<?php echo $theme; ?>">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<?php
+	// --- Basic vars (assume already defined earlier)
+	$appVersion = '1.0.45';
+	$dateModified = date('Y-m-d'); // automatic
+	$siteNameSafe = sanitize_output($siteName);
+	$siteUrlSafe = rtrim(sanitize_output($siteUrl), '/');
+	$scriptPathSafe = sanitize_output($script_name);
+
+	// Meta description (keep ~150 chars)
+	$metaDescription = sprintf(
+		'Enterprise Looking Glass network diagnostics — Ping, Traceroute, Host, MTR. Hosted in %s. IPv4/IPv6 support. Akurat dan real-time!',
+		sanitize_output($serverLocation ?: 'multiple locations')
+	);
+
+	// Keywords array (manageable)
+	$keywords = [
+		'looking glass', 'network diagnostics', 'ping', 'traceroute', 'mtr', 'host',
+		'ipv6', 'ipv4', 'network tools', 'alsyundawy', 'orion',
+	];
+	$metaKeywords = implode(', ', $keywords);
+
+	// Canonical URL
+	$canonical = $siteUrlSafe . $scriptPathSafe;
+
+	// Terms & Privacy (assumed path; adjust if different)
+	$termsUrl = $siteUrlSafe . '/terms';
+	$privacyUrl = $siteUrlSafe . '/privacy';
+
+	// Hreflang alternatives (add more if you host more locales)
+	$hreflangs = [
+		['href' => $siteUrlSafe . $scriptPathSafe, 'lang' => 'en'],
+		['href' => $siteUrlSafe . '/id' . $scriptPathSafe, 'lang' => 'id']
+	];
+	?>
+	<title><?= $siteNameSafe ?> — Looking Glass | Advanced Network Diagnostics</title>
+
+	<meta name="description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
+	<meta name="keywords" content="<?= htmlspecialchars($metaKeywords, ENT_QUOTES, 'UTF-8') ?>">
+	<meta name="author" content="ALSYUNDAWY IT SOLUTION - AS696969">
+	<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+	<meta name="referrer" content="no-referrer-when-downgrade">
+
+	<!-- Open Graph -->
+	<meta property="og:locale" content="id_ID" />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="<?= $siteNameSafe ?> — Looking Glass | Network Diagnostics" />
+	<meta property="og:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>" />
+	<meta property="og:url" content="<?= $canonical ?>" />
+	<meta property="og:site_name" content="<?= $siteNameSafe ?> Network Tools" />
+	<meta property="og:image" content="<?= $siteUrlSafe ?>/assets/social-share-image.png" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+
+	<!-- Twitter -->
+	<meta name="twitter:card" content="summary_large_image">
+	<meta name="twitter:title" content="<?= $siteNameSafe ?> — Looking Glass">
+	<meta name="twitter:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
+	<meta name="twitter:image" content="<?= $siteUrlSafe ?>/assets/social-share-image.png">
+
+	<!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+	<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="apple-touch-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="apple-touch-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="apple-touch-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="apple-touch-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="apple-touch-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="57x57" href="apple-touch-icon-57x57.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="android-chrome-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="android-chrome-512x512.png">
+	<link rel="manifest" href="/site.webmanifest">
+
+	<link rel="canonical" href="<?= $canonical ?>" />
+
+	<!-- Hreflang alternates -->
+	<?php foreach ($hreflangs as $hf): ?>
+	<link rel="alternate" href="<?= sanitize_output($hf['href']) ?>" hreflang="<?= sanitize_output($hf['lang']) ?>">
+	<?php endforeach; ?>
+
+	<!-- Prefetch / Preconnect -->
+	<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+	<link rel="dns-prefetch" href="https://fonts.googleapis.com">
+	<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+	<link rel="preconnect" href="cdnjs.cloudflare.com" crossorigin>
+	<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+	<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+	<!-- Styles (CDN) - keep integrity attributes if you add them -->
+	<link href="https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.min.css" rel="stylesheet" crossorigin="anonymous">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet" crossorigin="anonymous">
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=Montserrat:wght@700;900&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+	<?php
+		/* ---------------------------
+		   JSON-LD via json_encode()
+		   Updated for ALSYUNDAWY IT SOLUTION (2026-02-13)
+		   --------------------------- */
+
+		$appSchema = [
+			'@context' => 'https://schema.org',
+			'@type' => 'SoftwareApplication',
+			'name' => 'Alsyundawy Looking Glass',
+			'alternateName' => ['Looking Glass ' . $siteNameSafe, 'LG Alsyundawy'],
+			'applicationCategory' => 'NetworkApplication',
+			'operatingSystem' => ['Web Browser', 'Platform Independent'],
+			'url' => $canonical,
+			'description' => $metaDescription,
+			'softwareVersion' => $appVersion,
+			'datePublished' => '2026-02-13',
+			'dateModified' => '2026-02-13',
+			'inLanguage' => ['en', 'id'],
+			'offers' => [
+				'@type' => 'Offer',
+				'price' => 0,
+				'priceCurrency' => 'USD',
+				'availability' => 'https://schema.org/InStock',
+				'description' => 'Free to use and modify'
+			],
+			'author' => [
+				'@type' => 'Organization',
+				'name' => 'ALSYUNDAWY IT SOLUTION',
+				'url' => 'https://alsyundawy.com',
+				'telephone' => '+62-812-9898-6464',
+				'email' => 'noc@alsyundawy.com',
+				'sameAs' => [
+					'https://alsyundawy.com',
+					'https://www.peeringdb.com/asn/696969'
+				],
+				'contactPoint' => [
+					[
+						'@type' => 'ContactPoint',
+						'email' => 'noc@alsyundawy.com',
+						'telephone' => '+62-812-9898-6464',
+						'contactType' => 'Network Operations',
+						'availableLanguage' => ['English', 'Indonesian']
+					],
+					[
+						'@type' => 'ContactPoint',
+						'email' => 'abuse@alsyundawy.com',
+						'telephone' => '+62-812-9898-6464',
+						'contactType' => 'Abuse',
+						'availableLanguage' => ['English', 'Indonesian']
+					]
+				]
+			],
+			'creator' => [
+				'@type' => 'Organization',
+				'name' => 'ALSYUNDAWY IT SOLUTION',
+				'url' => 'https://alsyundawy.com',
+				'contactPoint' => [
+					'@type' => 'ContactPoint',
+					'email' => 'noc@alsyundawy.com',
+					'contactType' => 'Technical Support',
+					'availableLanguage' => ['English', 'Indonesian']
+				]
+			],
+			'termsOfService' => $termsUrl,
+			'privacyPolicy' => $privacyUrl,
+			'license' => 'https://opensource.org/licenses/MIT',
+			'featureList' => [
+				'Ping', 'Traceroute', 'MTR', 'Host'
+			],
+			'keywords' => $keywords,
+			'screenshot' => $siteUrlSafe . '/assets/screenshot.png'
+		];
+
+		$websiteSchema = [
+			'@context' => 'https://schema.org',
+			'@type' => 'WebSite',
+			'name' => 'Alsyundawy Looking Glass',
+			'url' => $siteUrlSafe,
+			'description' => $metaDescription,
+			'inLanguage' => ['en', 'id'],
+			'publisher' => [
+				'@type' => 'Organization',
+				'name' => 'ALSYUNDAWY IT SOLUTION',
+				'url' => 'https://alsyundawy.com',
+				'logo' => [
+					'@type' => 'ImageObject',
+					'url' => 'https://alsyundawy.com/assets/logo.png',
+					'width' => 200,
+					'height' => 200
+				],
+				'contactPoint' => [
+					'@type' => 'ContactPoint',
+					'telephone' => '+62-812-9898-6464',
+					'email' => 'noc@alsyundawy.com',
+					'contactType' => 'Customer Support'
+				]
+			],
+			'potentialAction' => [
+				'@type' => 'SearchAction',
+				'target' => $siteUrlSafe . '/?q={search_term_string}',
+				'query-input' => 'required name=search_term_string'
+			],
+			'termsOfService' => $termsUrl,
+			'privacyPolicy' => $privacyUrl
+		];
+
+		$breadcrumbSchema = [
+			'@context' => 'https://schema.org',
+			'@type' => 'BreadcrumbList',
+			'itemListElement' => [
+				['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => $siteUrlSafe],
+				['@type' => 'ListItem', 'position' => 2, 'name' => 'Network Tools', 'item' => $siteUrlSafe . '#tools']
+			]
+		];
+
+		$orgSchema = [
+			'@context' => 'https://schema.org',
+			'@type' => 'Organization',
+			'name' => 'ALSYUNDAWY IT SOLUTION',
+			'url' => 'https://alsyundawy.com',
+			'logo' => 'https://alsyundawy.com/assets/logo.png',
+			'sameAs' => [
+				'https://alsyundawy.com',
+				'https://www.peeringdb.com/asn/696969',
+				'https://bgp.tools/as/696969'
+			],
+			'identifier' => [
+				'@type' => 'PropertyValue',
+				'propertyID' => 'AS',
+				'value' => 'AS696969'
+			],
+			'contactPoint' => [
+				[
+					'@type' => 'ContactPoint',
+					'telephone' => '+62-812-9898-6464',
+					'email' => 'noc@alsyundawy.com',
+					'contactType' => 'NOC',
+					'availableLanguage' => ['English', 'Indonesian']
+				],
+				[
+					'@type' => 'ContactPoint',
+					'telephone' => '+62-812-9898-6464',
+					'email' => 'abuse@alsyundawy.com',
+					'contactType' => 'Abuse',
+					'availableLanguage' => ['English', 'Indonesian']
+				]
+			],
+			'address' => [
+				'@type' => 'PostalAddress',
+				'streetAddress' => 'Jalan Kuningan Barat No. 8, Gedung Cyber Lantai 1, Kuningan Barat, Mampang Prapatan',
+				'addressLocality' => 'Jakarta Selatan',
+				'postalCode' => '12710',
+				'addressCountry' => 'ID'
+			]
+		];
+
+		$faqSchema = [
+			'@context' => 'https://schema.org',
+			'@type' => 'FAQPage',
+			'mainEntity' => [
+				['@type' => 'Question', 'name' => 'What is Looking Glass network tool?', 'acceptedAnswer' => ['@type' => 'Answer', 'text' => 'A professional toolkit for network diagnostics including ping, traceroute, DNS, WHOIS, SSL, and port scanning.']],
+				['@type' => 'Question', 'name' => 'Does it support IPv6?', 'acceptedAnswer' => ['@type' => 'Answer', 'text' => 'Yes, IPv4 and IPv6 are fully supported.']]
+			]
+		];
+	?>
+
+
+	<!-- JSON-LD structured data -->
+	<script type="application/ld+json">
+	<?= json_encode($appSchema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?>
+	</script>
+
+	<script type="application/ld+json">
+	<?= json_encode($websiteSchema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?>
+	</script>
+
+	<script type="application/ld+json">
+	<?= json_encode($breadcrumbSchema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?>
+	</script>
+
+	<script type="application/ld+json">
+	<?= json_encode($orgSchema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?>
+	</script>
+
+	<script type="application/ld+json">
+	<?= json_encode($faqSchema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?>
+	</script>
+
+
+	
+    <style>:root{--font-main:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--font-mono:"Fira Code","SF Mono","Monaco",monospace;--color-primary:#004499;--color-primary-dark:#003377;--color-success:#28a745;--color-danger:#e74c3c;--color-white:#fff;--bg-light:#fafbfc;--bg-dark:#0d1117;--text-primary:#1a1a1a;--text-secondary:#6c757d;--card-bg:#fff;--border-radius:8px;--shadow-card:0 4px 12px rgba(0,0,0,.15);--transition:all .15s ease;--border-color:#d1d5db;--footer-bg:#0f172a;--footer-text:#f8fafc;--footer-link:#60a5fa;--footer-hover:#93c5fd;--header-bg:#0f172a;--header-text:#f8fafc;--header-link:#60a5fa}html[data-theme=dark]{--bg-light:#0d1117;--bg-dark:#010409;--text-primary:#f0f6fc;--text-secondary:#8b949e;--card-bg:#161b22;--shadow-card:0 8px 24px rgba(0,0,0,.5);--border-color:#30363d;--footer-bg:#020617;--header-bg:#020617}*{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-main);background-color:var(--bg-light);color:var(--text-primary);line-height:1.5;font-weight:400;font-size:12px}.wrapper{display:flex;flex-direction:column;min-height:100vh}.header{background:var(--header-bg);color:var(--header-text);padding:.6rem 0;position:relative;z-index:1001}html[data-theme=dark] .header{border-bottom:1px solid var(--border-color)}.header .container{max-width:1400px}.header img{height:36px;width:auto}.header__title{font-size:.95rem;font-weight:700;color:var(--header-text);text-shadow:2px 2px 4px rgba(0,0,0,.6);white-space:nowrap}.header__title .highlight2{color:var(--header-link)}.contact-info{display:flex;align-items:center;gap:.8rem;font-size:.75rem;font-weight:700;color:#fff;text-shadow:1px 1px 2px rgba(0,0,0,.4)}.contact-info span{white-space:nowrap}.contact-info i{margin-right:.2rem;color:#fff}.contact-info a{color:#fff;text-decoration:none;font-weight:700;text-shadow:1px 1px 2px rgba(0,0,0,.4)}.contact-info-mobile{display:none}.contact-info-mobile i{color:#fff}.main-content{flex:1;padding:15px}.site-header{padding:20px 15px;text-align:center;background:linear-gradient(135deg,rgba(0,68,153,.85),rgba(0,51,119,.85)),url('hero-lg.webp') center/cover no-repeat;color:var(--color-white);border-radius:0 0 var(--border-radius) var(--border-radius);box-shadow:var(--shadow-card);position:relative}.site-header h1{color:var(--color-white);font-weight:700;font-size:1.5rem;margin:0;text-shadow:2px 2px 8px rgba(0,0,0,.8)}.site-header p{color:var(--color-white);font-size:.85rem;margin:8px 0 0;font-weight:600;text-shadow:1px 1px 6px rgba(0,0,0,.8)}.site-header img{filter:drop-shadow(2px 2px 4px rgba(0,0,0,.5))}@media(max-width:768px){.site-header{background:linear-gradient(135deg,rgba(0,68,153,.9),rgba(0,51,119,.9)),url('hero-lg.webp') center/cover no-repeat;padding:15px 10px}.site-header h1{font-size:1.2rem}.site-header p{font-size:.75rem}}html[data-theme=dark] .site-header{background:linear-gradient(135deg,rgba(0,0,0,.7),rgba(0,68,153,.7)),url('hero-lg.webp') center/cover no-repeat}.theme-switcher-top{position:absolute;bottom:10px;right:10px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:var(--color-white);font-size:1.3rem;cursor:pointer;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:var(--transition);z-index:1002}.theme-switcher-top:hover{background:rgba(255,255,255,.2);transform:translateY(-1px)}html[data-theme=dark] .theme-switcher-top{background:rgba(0,0,0,.4);border-color:rgba(255,255,255,.25)}.main-nav{background:rgba(255,255,255,.98);backdrop-filter:blur(10px);border-bottom:1px solid rgba(0,0,0,.12);padding:.4rem 0;position:sticky;top:0;z-index:1000;box-shadow:0 2px 4px rgba(0,0,0,.1)}html[data-theme=dark] .main-nav{background:rgba(22,27,34,.98);border-bottom-color:rgba(255,255,255,.125)}.nav-menu{display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem;list-style:none;margin:0;padding:0}.nav-item{display:flex;align-items:center}.nav-item a{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .6rem;border-radius:5px;color:var(--text-primary);text-decoration:none;font-weight:600;font-size:.75rem;transition:var(--transition)}.nav-item a:hover{color:var(--color-primary);background:rgba(0,68,153,.1)}.nav-item a i{color:var(--color-primary)}html[data-theme=dark] .nav-item a i{color:#fff}.nav-item-theme{margin-left:auto;margin-right:0}.nav-item-theme button{background:transparent;border:none;color:var(--text-primary);display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;cursor:pointer;transition:var(--transition);font-size:.9rem}.nav-item-theme button:hover{background:rgba(0,68,153,.12);color:var(--color-primary)}html[data-theme=dark] .nav-item-theme button{color:#facc15}.info-card{background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--border-radius);box-shadow:var(--shadow-card);margin-bottom:1.2rem}.info-card-body{padding:1.2rem}.info-card-title{font-weight:700;font-size:.95rem;margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem}.info-card-title i{color:var(--color-primary)}.data-table{width:100%;border-collapse:collapse}.data-table td{padding:5px 6px;border:none;vertical-align:top}.data-table td:first-child{font-weight:600;color:var(--text-primary);font-size:.75rem;white-space:nowrap}.data-table td:nth-child(2){text-align:left;color:var(--text-secondary);padding-left:0;padding-right:6px;white-space:nowrap}.data-table td:nth-child(3){font-weight:700;color:var(--text-primary);font-size:.75rem;word-break:break-all}.data-table td i{color:var(--color-primary);margin-right:.2rem}.iperf-cmd-box{background:#e9ecef;color:#004499;padding:6px;border-radius:4px;font-size:.7rem;margin:.4rem 0;font-weight:700;font-family:var(--font-mono)}html[data-theme=dark] .iperf-cmd-box{background:#21262d;color:#60a5fa}.download-section-title{font-weight:700;text-align:center;margin-top:1.5rem;margin-bottom:.6rem;font-size:.85rem}.network-test-container{background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--border-radius);box-shadow:var(--shadow-card);margin:1.2rem 0}.network-test-title{text-align:center;font-weight:700;margin:0;padding:.4rem 1.2rem;border-bottom:1px solid var(--border-color);font-size:.8rem;text-transform:uppercase;background:linear-gradient(45deg,var(--color-primary),var(--color-primary-dark));color:#fff;border-radius:var(--border-radius) var(--border-radius) 0 0}html[data-theme=dark] .network-test-title{background:linear-gradient(45deg,#f1585c,#e04448)}.test-tabs .nav-tabs{border-bottom:2px solid var(--border-color);padding:.5rem .5rem 0;background:transparent;display:flex;flex-wrap:wrap;justify-content:flex-start;gap:.4rem;margin-bottom:1rem}.test-tabs .nav-tabs .nav-link{border:1px solid var(--border-color);color:var(--color-primary);font-weight:600;padding:.35rem .6rem;background:transparent;transition:var(--transition);border-radius:4px 4px 0 0;font-size:.68rem;white-space:nowrap}html[data-theme=dark] .test-tabs .nav-tabs .nav-link{color:#c8d9e8}.test-tabs .nav-tabs .nav-link:hover{background:rgba(0,68,153,.1);color:var(--color-primary)}.test-tabs .nav-tabs .nav-link.active{background:#004499;color:#fff;border:1px solid #003377}.test-tabs .nav-tabs .nav-link i{margin-right:.3rem;font-size:.7rem}.test-tabs .tab-content{padding:1.2rem}.test-form{display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-end}.test-form .form-group{flex:1;min-width:160px}.test-form label{font-weight:600;margin-bottom:.4rem;display:block;font-size:.8rem}.passgen-form .form-group>div:first-child{font-weight:700;margin-bottom:.7rem;font-size:.85rem;color:var(--text-primary)}.test-form input,.test-form select{width:100%;padding:.6rem;border:1px solid var(--border-color);border-radius:5px;background:var(--bg-light);color:var(--text-primary);font-size:.8rem}html[data-theme=dark] .test-form input,html[data-theme=dark] .test-form select{background:var(--bg-dark)}.test-form input:focus,.test-form select:focus{outline:0;border-color:var(--color-primary);box-shadow:0 0 0 2px rgba(0,68,153,.15)}.form-actions{display:flex;gap:.8rem;margin-top:.8rem}.action-btn{padding:.55rem 1.1rem;border:none;border-radius:5px;font-weight:700;cursor:pointer;transition:var(--transition);display:inline-flex;align-items:center;gap:.4rem;font-size:.75rem;min-height:40px}.action-btn i{font-size:.75rem}.action-btn-primary{background:linear-gradient(45deg,var(--color-primary),var(--color-primary-dark));color:var(--color-white);box-shadow:0 3px 10px rgba(0,68,153,.3)}.action-btn-primary:hover{transform:translateY(-1px)}.action-btn-reset{background:#f1585c;color:var(--color-white);box-shadow:0 3px 10px rgba(241,88,92,.3)}.action-btn-reset:hover{transform:translateY(-1px);background:#e04448}.output-section{margin-top:1.2rem;display:none}.output-section.show{display:block}.output-box{font-family:var(--font-mono);background:#0d1117;color:#e6edf3;padding:1.2rem;border-radius:var(--border-radius);max-height:550px;overflow-y:auto;font-size:.75rem;white-space:pre-wrap;word-wrap:break-word}.minify-container{background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1.2rem;box-shadow:var(--shadow-card)}html[data-theme=dark] .minify-container{border-color:rgba(255,255,255,.125)}.netplan-form{display:grid;grid-template-columns:repeat(12,1fr);gap:.8rem;align-items:end}@media(min-width:768px){.site-header h1{font-size:2.5rem}}@media(max-width:767px){.test-tabs .nav-tabs{justify-content:center;gap:0.2rem}.test-tabs .nav-tabs .nav-link{flex:1 1 auto;text-align:center;padding:0.5rem 0.2rem;font-size:0.75rem;min-width:80px;display:flex;align-items:center;justify-content:center}.test-tabs .nav-tabs .nav-link i{margin-right:0.2rem}}.tab-section-header{text-align:left;margin-bottom:0.8rem;padding-bottom:0.4rem;border-bottom:none}.tab-section-header h4{font-size:1.2rem;font-weight:700;color:var(--color-primary);margin-bottom:0.3rem}html[data-theme=dark] .tab-section-header h4{color:#60a5fa}.tab-section-header p{font-size:0.9rem;color:var(--text-secondary);margin:0}.netplan-form .np-col-2{grid-column:span 2}.netplan-form .np-col-3{grid-column:span 3}.netplan-form .np-col-4{grid-column:span 4}.netplan-form .np-col-6{grid-column:span 6}.netplan-form .np-col-8{grid-column:span 8}.netplan-form .np-col-12{grid-column:span 12}.np-check{display:flex;align-items:center;gap:.45rem;padding:.55rem .65rem;border:1px solid var(--border-color);border-radius:5px;background:var(--bg-light);min-height:40px}.np-check label{margin:0;font-weight:700;font-size:.75rem;display:flex;align-items:center;gap:.35rem;white-space:nowrap}.np-check i{color:var(--color-primary)}html[data-theme=dark] .np-check{background:var(--bg-dark)}.np-check input{width:1.1rem;height:1.1rem;accent-color:var(--color-primary)}.np-help{font-size:.7rem;font-weight:700;color:var(--text-secondary);padding:.35rem 0;align-self:center}.np-ipv6-section{display:none;grid-template-columns:repeat(12,1fr);gap:.8rem;padding:.8rem;margin-top:.2rem;background:rgba(0,68,153,.05);border-left:4px solid var(--color-primary);border-radius:4px}.np-yaml-card{border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;margin-top:.8rem;box-shadow:0 2px 6px rgba(0,0,0,.1)}.np-yaml-head{background:var(--bg-dark);color:#fff;padding:.55rem .7rem;font-weight:700;font-size:.75rem;position:relative}html[data-theme=dark] .np-yaml-head{background:#161b22}.np-copy-btn{position:absolute;right:.6rem;top:.45rem;background:var(--color-primary);color:#fff;border:none;padding:.25rem .5rem;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer}.np-copy-btn:hover{background:var(--color-primary-dark)}@keyframes tabFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.tab-pane.active.show{animation:tabFadeIn .3s ease-out}@media(max-width:992px){.netplan-form{grid-template-columns:repeat(8,1fr)}.netplan-form .np-col-8{grid-column:span 8}}@media(max-width:768px){.netplan-form{grid-template-columns:repeat(6,1fr)}.netplan-form .np-col-4,.netplan-form .np-col-6{grid-column:span 6}.netplan-form .np-col-8{grid-column:span 6}.netplan-form .np-col-3{grid-column:span 3}.netplan-form .np-col-2{grid-column:span 3}}@media(max-width:576px){.netplan-form{grid-template-columns:repeat(4,1fr)}.netplan-form .np-col-2,.netplan-form .np-col-3,.netplan-form .np-col-4,.netplan-form .np-col-6,.netplan-form .np-col-8{grid-column:span 4}.np-help{grid-column:span 4}}.dns-server-box{background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:.8rem;margin-bottom:.8rem;box-shadow:0 2px 6px rgba(0,0,0,.1)}.dns-server-title{font-weight:700;font-size:.85rem;margin-bottom:.6rem;color:var(--color-primary);display:flex;align-items:center;gap:.4rem}.dns-server-title i{font-size:.8rem}.result-table{width:100%;border-collapse:collapse;margin-top:.4rem}.result-table thead{background:var(--color-primary);color:var(--color-white)}.result-table th,.result-table td{padding:.5rem .6rem;text-align:left;border:1px solid var(--border-color);font-size:.75rem;word-break:break-word}.result-table tbody tr:nth-child(even){background:rgba(0,68,153,.05)}.result-table tbody tr:hover{background:rgba(0,68,153,.1)}.trustcheck-info{background:rgba(0,68,153,.05);border-left:4px solid var(--color-primary);padding:.8rem;margin:.8rem 0;font-size:.75rem;border-radius:4px}.trustcheck-badge{display:inline-block;background:var(--color-primary);color:#fff;padding:.2rem .5rem;border-radius:3px;font-size:.7rem;font-weight:700;margin:.2rem}.trustcheck-pagination{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.5rem;margin:1.2rem 0}.trustcheck-pagination .page-btn{padding:.4rem .7rem;background:var(--color-primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.7rem;font-weight:600;transition:var(--transition)}.trustcheck-pagination .page-btn:hover:not(:disabled){background:var(--color-primary-dark);transform:translateY(-1px)}.trustcheck-pagination .page-btn.active{background:var(--color-success)}.trustcheck-pagination .page-btn:disabled{background:#ccc;cursor:not-allowed;opacity:.6}.trustcheck-pagination .page-dots{color:var(--text-secondary);padding:0 .3rem;font-weight:700}.trustcheck-pagination .jump-form{display:flex;align-items:center;gap:.3rem}.trustcheck-pagination .jump-form input{width:70px;padding:.35rem .5rem;border:1px solid var(--border-color);border-radius:4px;text-align:center;font-size:.7rem;background:var(--bg-light);color:var(--text-primary)}html[data-theme=dark] .trustcheck-pagination .jump-form input{background:var(--bg-dark)}.trustcheck-pagination .jump-form button{padding:.35rem .6rem;background:var(--color-primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.7rem}.alert-msg{padding:.8rem;border-radius:5px;margin:.8rem 0;font-weight:600;font-size:.8rem}.alert-error{background:#f8d7da;color:#842029;border:1px solid #f5c2c7}.alert-success{background:#d1e7dd;color:#0f5132;border:1px solid #badbcc}.alert-warning{background:#fff3cd;color:#664d03;border:1px solid #ffecb5}.site-footer{background:var(--footer-bg);color:var(--footer-text);padding:1.5rem 0;margin-top:auto;border-top:1px solid var(--border-color)}.site-footer h5{font-weight:700;margin-bottom:.8rem;font-size:.9rem}.site-footer h5 .highlight{color:var(--footer-link)}.site-footer p{font-weight:700;margin-bottom:.6rem;line-height:1.5;font-size:.75rem}.site-footer a{color:var(--footer-link);text-decoration:none;font-weight:700}.site-footer a.footer-brand{color:inherit;text-decoration:none}.site-footer a.footer-brand:hover{color:inherit;text-decoration:none}.site-footer a:hover{color:var(--footer-hover);text-decoration:underline}.social-links a{display:inline-flex;align-items:center;justify-content:center;width:1.8rem;height:1.8rem;background:rgba(255,255,255,.1);border-radius:50%;color:var(--footer-text);margin-right:.4rem;font-size:.75rem;transition:var(--transition)}.social-links a:hover{background:var(--footer-link);color:var(--footer-bg);transform:translateY(-1px)}.scroll-top-btn{display:none;position:fixed;bottom:75px;right:20px;z-index:1010;background:var(--color-primary);color:var(--color-white);width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.3)}.scroll-top-btn i{font-size:1.35rem;line-height:1}.progress-spinner-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;justify-content:center;align-items:center;z-index:9999;visibility:hidden;opacity:0;transition:opacity .2s}.progress-spinner-overlay.active{visibility:visible;opacity:1}.spinner-element{width:45px;height:45px;border-radius:50%;border-top:4px solid #ff3d00;border-right:4px solid transparent;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:992px){.result-table{font-size:.68rem;display:block;overflow-x:auto}.result-table th,.result-table td{padding:.4rem .5rem}}@media(max-width:768px){body{font-size:10px}.contact-info{display:none}.contact-info-mobile{display:flex;gap:.8rem}.contact-info-mobile a{color:var(--header-link);font-size:.9rem}.header{padding:.5rem 0}.header img{height:22px}.header__title{font-size:.65rem}.site-header{padding:15px 10px}.site-header h1{font-size:1.2rem}.site-header p{font-size:.75rem}.nav-item-theme{margin-left:0}.nav-item a{padding:.25rem .5rem;font-size:.65rem}.nav-item a span{display:none}.info-card-body{padding:1.4rem}.info-card-title{font-size:.85rem}.data-table td{padding:4px 5px}.data-table td:first-child{font-size:.65rem}.data-table td:nth-child(3){font-size:.65rem}.test-tabs .nav-tabs{padding:.15rem .3rem;gap:.3rem;justify-content:center}.test-tabs .nav-tabs .nav-link{padding:.3rem .5rem;font-size:.6rem;min-height:38px}.test-tabs .tab-content{padding:1.4rem}.test-form{flex-direction:column}.test-form .form-group{min-width:100%}.test-form label{font-size:.7rem}.test-form input,.test-form select{font-size:.75rem;padding:.6rem}.form-actions{flex-direction:column;width:100%}.action-btn{width:100%;padding:.6rem .9rem;font-size:.7rem}.result-table{font-size:.65rem}.result-table th,.result-table td{padding:.35rem .4rem}.dns-server-box{padding:.6rem}.dns-server-title{font-size:.75rem}.trustcheck-info{font-size:.7rem;padding:.6rem}.trustcheck-badge{font-size:.65rem;padding:.15rem .4rem}.trustcheck-pagination{gap:.3rem;margin:1rem 0}.trustcheck-pagination .page-btn{padding:.3rem .5rem;font-size:.65rem}.trustcheck-pagination .jump-form input{width:60px;font-size:.65rem;padding:.3rem .4rem}.trustcheck-pagination .jump-form button{padding:.3rem .5rem;font-size:.65rem}.site-footer{padding:1.2rem 0;font-size:.7rem}.site-footer h5{font-size:.8rem}.site-footer p{font-size:.65rem}.social-links a{width:1.6rem;height:1.6rem;font-size:.7rem}.scroll-top-btn{width:36px;height:36px}}@media(max-width:576px){.data-table td:nth-child(3){font-size:.6rem}.result-table{font-size:.6rem}.result-table th,.result-table td{padding:.3rem .35rem}}@media(max-width:480px){.header{padding:.45rem 0}.header img{height:20px}.header__title{font-size:.6rem}.test-tabs .nav-tabs .nav-link{font-size:.55rem;padding:.28rem .45rem}}@media(max-width:375px){.header img{height:24px}.header__title{font-size:.55rem}.contact-info-mobile a{font-size:.8rem}}@media(max-width:320px){.header img{height:22px}.header__title{font-size:.55rem}.contact-info-mobile a{font-size:.75rem}}@media(min-width:1920px){.container{max-width:1600px}}@media(min-width:2560px){.container{max-width:2200px}}.speedtest-container{width:100%;max-width:100%;margin:0 auto}.speedtest-header{text-align:center;padding:1rem;background:linear-gradient(135deg,var(--color-primary),var(--color-primary-dark,#003377));color:#fff;border-radius:var(--border-radius);margin-bottom:1.5rem}.speedtest-header h4{margin:0;font-size:1.1rem;font-weight:600}.speedtest-header p{margin:.5rem 0 0;opacity:.9;font-size:.8rem}.speedtest-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1.5rem}@media(max-width:992px){.speedtest-cards{grid-template-columns:repeat(2,1fr)}}@media(max-width:576px){.speedtest-cards{grid-template-columns:repeat(2,1fr);gap:.8rem}.speedtest-card{padding:1rem .5rem}.speedtest-icon{width:36px;height:36px;font-size:1rem;margin-bottom:.5rem}.speedtest-value{font-size:1.3rem;margin-bottom:.2rem}.speedtest-value.jitter{font-size:1.1rem!important}.speedtest-label{font-size:.65rem;margin-bottom:.3rem}.speedtest-unit{font-size:.65rem}}.speedtest-card{background:var(--card-bg);border-radius:var(--border-radius);padding:1.5rem 1rem;text-align:center;box-shadow:var(--shadow-card);border:1px solid var(--border-color);transition:var(--transition)}.speedtest-card.active{border-color:var(--color-primary);box-shadow:0 0 0 2px rgba(0,68,153,.2)}.speedtest-card:hover{transform:translateY(-2px)}.speedtest-icon{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto .75rem;font-size:1.25rem;color:#fff}.speedtest-icon.dl{background:linear-gradient(135deg,#0066cc,#004499)}.speedtest-icon.ul{background:linear-gradient(135deg,#28a745,#1e7e34)}.speedtest-icon.ping{background:linear-gradient(135deg,#e74c3c,#c82333)}.speedtest-icon.jitter{background:linear-gradient(135deg,#e67e22,#e0a800)}.speedtest-label{font-size:.75rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem}.speedtest-value{font-size:2rem;font-weight:700;line-height:1.2;margin-bottom:.25rem;font-variant-numeric:tabular-nums}.speedtest-value.dl{color:#0066cc}html[data-theme=dark] .speedtest-value.dl{color:#0099ff}.speedtest-value.ul{color:#28a745}html[data-theme=dark] .speedtest-value.ul{color:#3fb950}.speedtest-value.ping{color:#e74c3c}html[data-theme=dark] .speedtest-value.ping{color:#ff6b6b}.speedtest-value.jitter{color:#e67e22;font-size:1.6rem}html[data-theme=dark] .speedtest-value.jitter{color:#ffa502;font-size:1.6rem}.speedtest-unit{font-size:.75rem;color:var(--text-secondary);font-weight:500}.speedtest-progress{width:100%;height:5px;background:rgba(0,0,0,.1);border-radius:3px;margin-top:.75rem;overflow:hidden}html[data-theme=dark] .speedtest-progress{background:rgba(255,255,255,.1)}.speedtest-progress-bar{height:100%;background:linear-gradient(90deg,var(--color-primary),var(--color-primary-dark,#003377));border-radius:3px;width:0;transition:width .3s ease}.speedtest-btn-container{display:flex;justify-content:center;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem}.speedtest-btn{background:linear-gradient(45deg,var(--color-primary),var(--color-primary-dark,#003377));color:#fff;border:none;padding:.6rem 1.5rem;font-size:.85rem;font-weight:700;border-radius:var(--border-radius);cursor:pointer;transition:var(--transition);box-shadow:0 4px 12px rgba(0,102,204,.3);min-width:120px;margin:.25rem}.speedtest-btn-reset{background:linear-gradient(45deg,#f1585c,#e04448);box-shadow:0 4px 12px rgba(241,88,92,.3)}.speedtest-btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,102,204,.4)}.speedtest-btn:active{transform:translateY(0)}.speedtest-btn.running{background:linear-gradient(135deg,#e74c3c,#c0392b);box-shadow:0 4px 12px rgba(231,76,60,.4)}.speedtest-btn-reset:hover{background:linear-gradient(45deg,#e04448,#c82333)}.speedtest-btn:disabled{background-color:#6c757d;cursor:not-allowed;transform:none;box-shadow:none;opacity:.6}.speedtest-btn i{margin-right:.5rem}.speedtest-status{text-align:center;padding:.75rem 1rem;background:rgba(0,102,204,.05);border-radius:var(--border-radius);border:1px solid rgba(0,102,204,.1);font-weight:500;font-size:.85rem}html[data-theme=dark] .speedtest-status{background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3)}.speedtest-info{margin-top:1.5rem;padding:1rem;background:rgba(0,102,204,.03);border-radius:var(--border-radius);border:1px solid rgba(0,102,204,.1);font-size:.8rem;color:var(--text-secondary)}html[data-theme=dark] .speedtest-info{background:rgba(99,102,241,.05);border-color:rgba(99,102,241,.2)}.speedtest-info p{margin:.25rem 0}.speedtest-info i{color:var(--color-primary);margin-right:.5rem}.passgen-checkbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem}.passgen-check{display:flex;align-items:center;gap:.5rem;padding:.5rem .8rem;background:var(--bg-light);border:1px solid var(--border-color);border-radius:5px;cursor:pointer;font-weight:500;font-size:.75rem;transition:var(--transition)}.passgen-check span{display:inline-block;vertical-align:middle;margin-top:-8px;margin-left:.4rem}.passgen-check input[type=checkbox]{width:18px;height:18px;accent-color:var(--color-primary);cursor:pointer}.passgen-check:hover{border-color:var(--color-primary);background:rgba(0,68,153,.05)}.passgen-check input[type=checkbox]{width:16px;height:16px;accent-color:var(--color-primary)}.passgen-result-table{width:100%;border-collapse:collapse}.passgen-result-table tr{border-bottom:1px solid var(--border-color)}.passgen-result-table td{padding:.6rem .8rem;font-family:var(--font-mono);font-size:.75rem}.passgen-result-table td:first-child{width:50px;text-align:center;color:var(--text-muted)}.passgen-result-table td:last-child{width:40px;text-align:center}.passgen-copy-btn{background:0 0;border:none;cursor:pointer;color:var(--color-primary);padding:.5rem;border-radius:4px;transition:var(--transition);font-size:1.1rem}.passgen-copy-btn:hover{background:rgba(0,68,153,.1)}.passgen-copy-btn.copied{color:var(--color-success)}.ipua-container{width:100%;max-width:100%}.ipua-header{text-align:center;padding:1rem;background:linear-gradient(135deg,var(--color-primary),var(--color-primary-dark,#003377));color:#fff;border-radius:var(--border-radius);margin-bottom:1.5rem}.ipua-header h4{margin:0;font-size:1.1rem;font-weight:600}.ipua-header p{margin:.5rem 0 0;opacity:.9;font-size:.8rem}.ipua-table td:first-child{width:180px;font-weight:600;white-space:nowrap}.ipua-table td:first-child i{margin-right:.5rem;color:var(--color-primary);width:16px}.ipua-loading{color:var(--text-muted);font-style:italic}@media(max-width:576px){.passgen-checkbox-grid{grid-template-columns:1fr}.ipua-table td:first-child{width:120px;font-size:.7rem}.ipua-table td{font-size:.7rem}}.phpencrypt-grid{display:grid;grid-template-columns:2fr 1.5fr 1fr;gap:15px;align-items:start;width:100%}.phpencrypt-grid .form-group{width:100%;margin-bottom:0;min-width:0}.phpencrypt-grid label{display:block;margin-bottom:6px;font-weight:600;font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.phpencrypt-grid input[type="file"],.phpencrypt-grid select{width:100%;padding:0.6rem;border:1px solid var(--border-color);border-radius:5px;background:var(--bg-light);color:var(--text-primary);font-size:0.8rem;height:42px;box-sizing:border-box}html[data-theme='dark'] .phpencrypt-grid input[type="file"],html[data-theme='dark'] .phpencrypt-grid select{background:var(--bg-dark)}.phpencrypt-grid .form-actions{grid-column:1 / -1;display:flex;gap:10px;margin-top:15px}@media (max-width:768px){.phpencrypt-grid{grid-template-columns:1fr;gap:12px}.phpencrypt-grid .form-actions{flex-direction:column}.phpencrypt-grid input[type="file"],.phpencrypt-grid select{height:auto}}.btn-download-test{background:linear-gradient(135deg,#004499,#003377);color:#fff;padding:.4rem .8rem;border-radius:5px;text-decoration:none;font-size:.75rem;font-weight:600;display:inline-flex;align-items:center;gap:.5rem;transition:all .2s ease;box-shadow:0 2px 5px rgba(0,0,0,.1);border:1px solid rgba(255,255,255,.1)}.btn-download-test:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,68,153,.3);color:#fff;filter:brightness(1.1);text-decoration:none}.btn-download-test i{font-size:.85rem}.btn-download-test.btn-green{background:linear-gradient(135deg,#28a745,#20c997);border:1px solid rgba(255,255,255,.1)}.btn-download-test.btn-green:hover{box-shadow:0 4px 8px rgba(40,167,69,.3)}.minify-type-label{cursor:pointer;padding:.5rem 1rem;border:1px solid var(--color-primary);border-radius:5px;font-size:.85rem;background:0 0;color:var(--color-primary);transition:all .2s ease;display:inline-flex;align-items:center;gap:.5rem;font-weight:600}.minify-type-label:hover{background:rgba(0,68,153,.1);transform:translateY(-1px)}.btn-check:checked+.minify-type-label{background:linear-gradient(135deg,var(--color-primary),var(--color-primary-dark));color:#fff;box-shadow:0 2px 5px rgba(0,68,153,.3)}.rbl-results-table{width:100%;margin:1rem 0;border-collapse:collapse;background:var(--card-bg);border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden}.rbl-results-table th,.rbl-results-table td{padding:.75rem 1rem;border-bottom:1px solid var(--border-color);vertical-align:middle;text-align:left}.rbl-results-table th{background:rgba(0,123,255,.05);font-weight:700;white-space:nowrap}html[data-theme=dark] .rbl-results-table th{background:rgba(0,153,255,.1)}.rbl-results-table td{font-family:var(--font-mono);font-size:.95rem;word-wrap:break-word}.table-col-no{width:80px;text-align:center}.table-col-status{width:120px}.rbl-status-listed{color:var(--color-danger);font-weight:700;display:inline-flex;align-items:center;gap:.4rem}.rbl-status-clean{color:var(--color-success);font-weight:700;display:inline-flex;align-items:center;gap:.4rem}.check-form-container{width:100%;max-width:900px;margin:2rem auto;background:var(--card-bg);padding:2rem;border-radius:var(--border-radius);box-shadow:var(--shadow-card);border:1px solid var(--border-color)}.input-field{width:100%;padding:.75rem 1rem;font-size:1rem;border:1px solid var(--border-color);border-radius:6px;background-color:var(--bg-light);color:var(--text-primary);text-align:center;font-weight:600}html[data-theme=dark] .input-field{background-color:#0d1117;color:#fff;border-color:#30363d}html[data-theme=dark] .input-field::placeholder{color:#8b949e}.input-label{display:block;text-align:center;font-weight:700;margin-bottom:.5rem;width:100%}.status-alert{padding:1rem;border-radius:6px;margin-bottom:1rem;text-align:center;font-weight:600}.status-alert-danger{background-color:#fee;color:#c00;border:1px solid #fcc}.status-alert-success{background-color:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9}.status-alert-warning{background-color:#fff3cd;color:#856404;border:1px solid #ffeaa7}html[data-theme=dark] .status-alert-danger{background-color:rgba(239,68,68,.2);color:#fca5a5;border-color:rgba(239,68,68,.5)}html[data-theme=dark] .status-alert-success{background-color:rgba(34,197,94,.2);color:#86efac;border-color:rgba(34,197,94,.5)}html[data-theme=dark] .status-alert-warning{background-color:rgba(251,191,36,.2);color:#fcd34d;border-color:rgba(251,191,36,.5)}@media(max-width:768px){.passgen-form{padding:1rem!important}.passgen-form .form-group{flex-basis:100%!important;width:100%!important;margin-bottom:1rem!important}.passgen-form input[type="number"]{width:100%!important;font-size:0.7rem!important;padding:0.75rem!important}.passgen-form label{font-size:0.7rem!important;font-weight:600!important;margin-bottom:0.5rem!important;display:block!important}.passgen-form .form-group>div:first-child{font-size:0.7rem!important;font-weight:700!important;margin-bottom:0.7rem!important}.passgen-checkbox-grid{display:flex!important;flex-direction:column!important;gap:0.75rem!important;width:100%!important}.passgen-check{width:100%!important;padding:0.75rem!important;margin:0!important;background:var(--card-bg)!important;border:1px solid var(--border-color)!important;border-radius:8px!important}.passgen-check label{font-size:0.7rem!important}.passgen-check input[type="checkbox"]{width:20px!important;height:20px!important;margin-right:0.75rem!important}.passgen-result-table{font-size:0.85rem!important;table-layout:fixed!important}.passgen-result-table thead th{font-size:0.75rem!important;padding:0.75rem 0.5rem!important;font-weight:700!important;text-align:center!important}.passgen-result-table thead th:first-child{width:75%!important}.passgen-result-table thead th:last-child{width:25%!important;text-align:center!important}.passgen-result-table tbody td:first-child{padding:0.75rem 0.5rem!important;word-break:break-all!important;font-size:0.75rem!important;font-weight:700!important}.passgen-result-table tbody td:last-child{padding:0.75rem 0.5rem!important;text-align:center!important}.passgen-copy-btn{padding:0.5rem 0.75rem!important;font-size:0.9rem!important}.passgen-form button[type="submit"]{width:100%!important;padding:0.875rem!important;font-size:0.7rem!important}}@media(max-width:768px){#netplanconfig-panel .form-group,#netplanconfig-panel .np-check{flex-basis:100%!important;width:100%!important;margin-bottom:1rem!important}#netplanconfig-panel input[type="text"],#netplanconfig-panel textarea{width:100%!important;font-size:16px!important;padding:0.75rem!important}#netplanconfig-panel label{font-size:0.7rem!important;font-weight:600!important;margin-bottom:0.5rem!important;display:block!important}#netplanconfig-panel .np-check{padding:0.75rem!important}#netplanconfig-panel .np-check label{font-size:0.7rem!important}#netplanconfig-panel input[type="checkbox"]{width:20px!important;height:20px!important}#netplanconfig-panel button[type="submit"]{width:100%!important;padding:0.875rem!important;font-size:0.7rem!important}#netplanconfig-panel textarea{min-height:200px!important;font-family:monospace!important}#netplanconfig-panel .netplan-form{display:flex!important;flex-direction:column!important;gap:1rem!important}.netplan-form .np-col-12,.netplan-form .np-col-3,.netplan-form .np-col-2,.netplan-form .np-col-6{grid-column:span 12!important}.np-ipv6-section{display:none;grid-template-columns:1fr!important}.np-ipv6-section .form-group{grid-column:span 1!important;width:100%!important}}</style>
+
+    <style>@media (max-width:768px){.site-header h1{font-size:1.5rem!important;margin-bottom:.2rem!important}.site-header p{font-size:.8rem!important;margin-top:0!important}.form-actions{flex-direction:column;align-items:stretch;gap:.5rem!important}.action-btn{width:100%!important;margin:0!important}.nav-item a{padding:.4rem .6rem;font-size:.7rem}.main-content{padding:20px}}@media(max-width:768px){.theme-switcher-top{width:38px;height:38px;font-size:1.2rem}.passgen-checkbox-grid{grid-template-columns:1fr;gap:.6rem}.passgen-check{padding:.6rem .8rem;font-size:.75rem}.passgen-check input[type=checkbox]{width:16px;height:16px}.passgen-copy-btn{font-size:1rem;padding:.4rem}}</style>
+</head>
+
+<body>
+    <div class="progress-spinner-overlay" id="progressLoader">
+        <div class="spinner-element"></div>
+    </div>
+    <div class="wrapper">
+        <header class="header" role="banner">
+            <div class="container">
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <div class="d-flex align-items-center">
+                        <a href="/" aria-label="Home"><img src="lg-logo.webp" alt="Looking Glass Logo" class="me-3"
+                                loading="lazy"></a>
+                        <span class="header__title">Looking Glass <span class="highlight2">Network Tools</span></span>
+                    </div>
+                    <div class="contact-info">
+                        <span><i class="fa-solid fa-phone-alt"></i> +62-812-9898-6464</span>
+                        <span>|</span>
+                        <span><i class="fa-solid fa-envelope"></i> <a
+                                href="mailto:info@alsyundawy.com">info@alsyundawy.com</a></span>
+                        <span>|</span>
+                        <span><i class="fa-brands fa-whatsapp"></i> +62-856-8-515-212</span>
+                        <span>|</span>
+                        <span><i class="fa-solid fa-globe"></i> <a href="https://www.alsyundawy.com" target="_blank"
+                                rel="noopener">www.alsyundawy.com</a></span>
+                    </div>
+                    <div class="contact-info-mobile">
+                        <a href="tel:+62-812-9898-6464" aria-label="Phone"><i class="fa-solid fa-phone-alt"></i></a>
+                        <a href="mailto:info@alsyundawy.com" aria-label="Email"><i class="fa-solid fa-envelope"></i></a>
+                        <a href="https://wa.me/628551838615" target="_blank" rel="noopener" aria-label="WhatsApp"><i
+                                class="fa-brands fa-whatsapp"></i></a>
+                        <a href="https://www.alsyundawy.com" target="_blank" rel="noopener" aria-label="Website"><i
+                                class="fa-solid fa-globe"></i></a>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <header class="site-header">
+            <div class="header-content">
+                <img src="lg-logo.webp" alt="ALSYUNDAWY IT SOLUTION" width="220">
+                <h1>
+                    <?php echo sanitize_output($siteName); ?>
+                </h1>
+                <p>Enterprise Network Diagnostics & Monitoring Solutions</p>
+            </div>
+        </header>
+			<nav class="main-nav" aria-label="Main navigation">
+				<div class="container d-flex align-items-center">
+					<ul class="nav-menu flex-grow-1">
+						<li class="nav-item">
+							<a href="/">
+								<i class="fa-solid fa-house"></i><span>Home</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://wa.me/628568515212" target="_blank" rel="noopener">
+								<i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://t.me/alsyundawy" target="_blank" rel="noopener">
+								<i class="fa-brands fa-telegram"></i><span>Telegram</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://github.com/alsyundawy" target="_blank" rel="noopener">
+								<i class="fa-brands fa-github"></i><span>GitHub</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://www.alsyundawy.com" target="_blank" rel="noopener">
+								<i class="fa-solid fa-globe"></i><span>Website</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://www.speedtest.net" target="_blank" rel="noopener">
+								<i class="fa-solid fa-tachometer-alt"></i><span>Speedtest</span>
+							</a>
+						</li>
+								
+						<li class="nav-item">
+							<a href="https://dnschecker.org" target="_blank" rel="noopener">
+								<i class="fa-solid fa-magnifying-glass"></i><span>DNS Checker</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://hetrixtools.com/blacklist-check/" target="_blank" rel="noopener">
+								<i class="fa-solid fa-magnifying-glass"></i><span>IP RBL Checker</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="https://mxtoolbox.com" target="_blank" rel="noopener">
+								<i class="fa-solid fa-magnifying-glass"></i><span>MX Tools</span>
+							</a>
+						</li>
+
+
+						<li class="nav-item">
+							<a href="https://mirror.sg.gs" target="_blank" rel="noopener">
+								<i class="fa-solid fa-box-archive"></i><span>Repository</span>
+							</a>
+						</li>
+
+						<li class="nav-item">
+							<a href="mailto:info@alsyundawy.com">
+								<i class="fa-solid fa-envelope"></i><span>Contact</span>
+							</a>
+						</li>
+					</ul>
+
+					<div class="nav-item nav-item-theme">
+						<button id="themeToggle" aria-label="Toggle theme">
+							<i class="fa-solid fa-moon"></i>
+						</button>
+					</div>
+				</div>
+			</nav>
+
+        <main class="main-content container">
+            <div class="row g-3 mt-2">
+                <div class="col-md-4">
+                    <div class="info-card">
+                        <div class="info-card-body">
+                            <h3 class="info-card-title"><i class="fas fa-server"></i>SERVER INFO</h3>
+                            <table class="data-table">
+                                <tr>
+                                    <td><i class="fas fa-map-marker-alt"></i>SERVER LOCATION</td>
+                                    <td>:</td>
+                                    <td>
+                                        <?php echo sanitize_output($serverLocation); ?>
+                                    </td>
+                                </tr>
+                                <?php if (!empty($ipv4)): ?>
+                                    <tr>
+                                        <td><i class="fas fa-globe"></i>Server IPv4</td>
+                                        <td>:</td>
+                                        <td>
+                                            <?php echo sanitize_output($ipv4); ?>
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
+                                <?php if (!empty($ipv6)): ?>
+                                    <tr>
+                                        <td><i class="fas fa-network-wired"></i>Server IPv6</td>
+                                        <td>:</td>
+                                        <td>
+                                            <?php echo sanitize_output($ipv6); ?>
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-card-body">
+                            <h3 class="info-card-title"><i class="fas fa-network-wired"></i>YOUR IP ADDRESS</h3>
+                            <table class="data-table">
+                                <tr>
+                                    <td><i class="fas fa-desktop"></i>Your IPv4</td>
+                                    <td>:</td>
+                                    <td><span id="clientIPv4">Loading...</span></td>
+                                </tr>
+                                <tr>
+                                    <td><i class="fas fa-laptop"></i>Your IPv6</td>
+                                    <td>:</td>
+                                    <td><span id="clientIPv6">Loading...</span></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <?php if (!empty($iperfport)): ?>
+                        <div class="info-card" style="height:calc(100% - 1.2rem)">
+                            <div class="info-card-body">
+                                <h3 class="info-card-title"><i class="fas fa-tachometer-alt"></i>IPERF TEST</h3>
+                                <?php if (!empty($ipv4)): ?>
+                                    <h5 style="font-weight:700;margin-top:.8rem;font-size:.85rem">IPv4</h5>
+                                    <pre
+                                        class="iperf-cmd-box">iperf3 -c <?php echo sanitize_output($ipv4); ?> -p 5201 -P 4</pre>
+                                    <pre
+                                        class="iperf-cmd-box">iperf3 -c <?php echo sanitize_output($ipv4); ?> -p 5201 -P 4 -R</pre>
+                                <?php endif; ?>
+                                <?php if (!empty($ipv6)): ?>
+                                    <h5 style="font-weight:700;margin-top:.8rem;font-size:.85rem">IPv6</h5>
+                                    <pre
+                                        class="iperf-cmd-box">iperf3 -c <?php echo sanitize_output($ipv6); ?> -p 5201 -P 4</pre>
+                                    <pre
+                                        class="iperf-cmd-box">iperf3 -c <?php echo sanitize_output($ipv6); ?> -p 5201 -P 4 -R</pre>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-card" style="height:calc(100% - 1.2rem)">
+                        <div class="info-card-body">
+                            <h3 class="info-card-title"><i class="fa-solid fa-download"></i>DOWNLOAD TEST</h3>
+                            <?php if (!empty($ipv4)): ?>
+                                <h5 class="download-section-title">IPv4 DOWNLOAD TEST FILE</h5>
+                                <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:.4rem 0">
+                                    <?php
+                                    if (!empty($testFiles) && is_array($testFiles)):
+                                        foreach ($testFiles as $val) {
+                                            $url = (!empty($siteUrlv4) && !empty($siteUrlv6)) ? sanitize_output($siteUrlv4) : sanitize_output($siteUrl);
+                                            echo '<a href="' . $url . '/' . sanitize_output($val) . '.bin" class="btn-download-test"><i class="fa-solid fa-file-arrow-down"></i> ' . sanitize_output($val) . '</a>';
+                                        }
+                                    endif;
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (!empty($ipv6)): ?>
+                                <h5 class="download-section-title">IPv6 DOWNLOAD TEST FILE</h5>
+                                <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:.4rem 0">
+                                    <?php
+                                    if (!empty($testFiles) && is_array($testFiles)):
+                                        foreach ($testFiles as $val) {
+                                            $url = (!empty($siteUrlv6) && !empty($siteUrlv4)) ? sanitize_output($siteUrlv6) : sanitize_output($siteUrl);
+                                            echo '<a href="' . $url . '/' . sanitize_output($val) . '.bin" class="btn-download-test"><i class="fa-solid fa-file-arrow-down"></i> ' . sanitize_output($val) . '</a>';
+                                        }
+                                    endif;
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                            <h5 class="download-section-title">SPEEDTEST & REPOSITORY</h5>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:.4rem 0">
+                                <a href="https://www.speedtest.net" target="_blank" rel="noopener"
+                                    class="btn-download-test btn-green"><i class="fa-solid fa-tachometer-alt"></i>
+                                    SPEEDTEST</a>
+                                <a href="https://mirror.sg.gs" target="_blank" rel="noopener"
+                                    class="btn-download-test btn-green"><i class="fa-solid fa-book-atlas"></i>
+                                    REPOSITORY</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="network-test-container">
+                        <h3 class="network-test-title"><i class="fa-solid fa-network-wired"></i> LOOKING GLASS NETWORK
+                            TEST TOOLS</h3>
+                        <div class="test-tabs">
+                            <ul class="nav nav-tabs" id="networkTestTabs" role="tablist">
+								<?php
+								$tabs = [];
+								if (((!empty($ipv4)) || (!empty($ipv6))) && (empty($ping))) {
+									$tabs[] = [
+										'id' => 'ping',
+										'icon' => 'fa-satellite-dish',
+										'label' => 'Ping',
+										'desc' => 'Check network connectivity and packet loss to a host (ICMP ping).',
+										'active' => true
+									];
+								}
+								if (((!empty($ipv4)) || (!empty($ipv6))) && (empty($traceroute))) {
+									$tabs[] = [
+										'id' => 'traceroute',
+										'icon' => 'fa-route',
+										'label' => 'Traceroute',
+										'desc' => 'Trace the packet path and measure per-hop latency to a host.',
+										'active' => empty($tabs)
+									];
+								}
+								if (((!empty($ipv4)) || (!empty($ipv6))) && (empty($host_cmd))) {
+									$tabs[] = [
+										'id' => 'host',
+										'icon' => 'fa-server',
+										'label' => 'Host',
+										'desc' => 'Perform DNS lookups and resolve hostnames to IP addresses (A/AAAA records).',
+										'active' => empty($tabs)
+									];
+								}
+								if (((!empty($ipv4)) || (!empty($ipv6))) && (empty($mtr))) {
+									$tabs[] = [
+										'id' => 'mtr',
+										'icon' => 'fa-chart-line',
+										'label' => 'MTR',
+										'desc' => 'Run MTR (combined traceroute and continuous ping) for real-time path and loss diagnostics.',
+										'active' => empty($tabs)
+									];
+								}
+								foreach ($tabs as $tab):
+									?>
+
+                                    <li class="nav-item" role="presentation">
+                                        <?php if (isset($tab['link'])): ?>
+                                            <a href="<?php echo $tab['link']; ?>"
+                                                class="nav-link <?php echo $tab['active'] ? 'active' : ''; ?>">
+                                                <i class="fas <?php echo $tab['icon']; ?>"></i>
+                                                <?php echo $tab['label']; ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <button class="nav-link <?php echo $tab['active'] ? 'active' : ''; ?>"
+                                                id="<?php echo $tab['id']; ?>-tab" data-bs-toggle="tab"
+                                                data-bs-target="#<?php echo $tab['id']; ?>-panel" type="button" role="tab">
+                                                <i class="fas <?php echo $tab['icon']; ?>"></i>
+                                                <?php echo $tab['label']; ?>
+                                            </button>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                            <div class="tab-content" id="networkTestTabsContent">
+                                <?php foreach ($tabs as $tab): ?>
+                                    <div class="tab-pane fade <?php echo $tab['active'] ? 'show active' : ''; ?>"
+                                        id="<?php echo $tab['id']; ?>-panel" role="tabpanel">
+                                        <div class="tab-section-header">
+                                            <h4><i class="fas <?php echo $tab['icon']; ?>"></i> <?php echo $tab['label']; ?></h4>
+                                            <p><?php echo $tab['desc'] ?? ''; ?></p>
+                                        </div>
+                                        <form class="test-form network-test-form" data-test-type="<?php echo $tab['id']; ?>">
+                                            <div class="form-group" style="flex-grow:2">
+                                                <label for="<?php echo $tab['id']; ?>_host">Host or IP Address:</label>
+                                                <input type="text" name="host" id="<?php echo $tab['id']; ?>_host" placeholder="Example: 8.8.8.8 or google.com" required>
+                                            </div>
+                                            <?php if (in_array($tab['id'], ['ping', 'traceroute', 'mtr'])): ?>
+                                                <div class="form-group" style="flex-grow:1">
+                                                    <label for="<?php echo $tab['id']; ?>_ipv">IP Version:</label>
+                                                    <select name="ipversion" id="<?php echo $tab['id']; ?>_ipv">
+                                                        <?php if (!empty($ipv4)): ?>
+                                                            <option value="4">IPv4</option>
+                                                        <?php endif; ?>
+                                                        <?php if (!empty($ipv6)): ?>
+                                                            <option value="6">IPv6</option>
+                                                        <?php endif; ?>
+                                                    </select>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="form-actions" style="flex-basis:100%;margin-top:.8rem">
+                                                <input type="hidden" name="csrf" value="<?php echo $csrf_token; ?>">
+                                                <input type="hidden" name="cmd" value="<?php echo $tab['id']; ?>">
+                                                <button type="submit" class="action-btn action-btn-primary"><i class="fas fa-play"></i>Run Test</button>
+                                                <button type="button" class="action-btn action-btn-reset reset-tab-btn"><i class="fas fa-eraser"></i>Reset</button>
+                                            </div>
+                                        </form>
+                                        <div class="output-section" data-output-for="<?php echo $tab['id']; ?>">
+                                            <div class="alert-msg alert-error" style="display:none"></div>
+                                            <pre class="output-box"></pre>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer class="site-footer" role="contentinfo">
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5><i class="fa-solid fa-network-wired"></i> Looking Glass <span class="highlight">Network
+                                Tools</span></h5>
+                        <p>Solusi analisis jaringan modern untuk kebutuhan diagnostik dan pemantauan profesional.</p>
+                        <p><a class="footer-brand" href="https://www.alsyundawy.com" target="_blank"
+                                rel="noopener">ALSYUNDAWY IT SOLUTION</a> | AS696969 | COPYLEFT © 2025. ALL RIGHTS
+                            RESERVED.</p>
+                        <p><a href="https://alsyundawy.com" target="_blank" rel="noopener">DESIGN OLEH HARRY DERTIN
+                                SUTISNA ALSYUNDAWY</a></p>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <p>COPYLEFT © 2025 Orion Looking Glass Network Tools. HAK CIPTA DILINDUNGI.</p>
+						<p>
+							INFO:
+							<a href="https://stat.ripe.net/AS696969" target="_blank" rel="noopener">RIPESTAT</a> |
+							<a href="http://bgp.he.net/AS696969" target="_blank" rel="noopener">HE.NET</a> |
+							<a href="https://bgp.tools/as/696969" target="_blank" rel="noopener">BGP.Tools</a> |
+							<a href="https://www.robtex.com/as/AS696969.html" target="_blank" rel="noopener">ROBTEX</a> |
+							<a href="http://www.peeringdb.com/view.php?asn=696969" target="_blank" rel="noopener">PEERINGDB</a> |
+							<a href="https://ipinfo.io/AS696969" target="_blank" rel="noopener">IPinfo</a> |
+							<a href="https://asrank.caida.org/asns/696969" target="_blank" rel="noopener">ASRank</a>
+						</p>
+                        <div class="social-links">
+                            <a href="https://github.com/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+                            <a href="https://linkedin.com/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="LinkedIn"><i class="fa-brands fa-linkedin"></i></a>
+                            <a href="https://twitter.com/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
+                            <a href="https://facebook.com/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="Facebook"><i class="fa-brands fa-facebook"></i></a>
+                            <a href="https://instagram.com/harry.ds.alsyundawy" target="_blank" rel="noopener"
+                                aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+                            <a href="https://youtube.com/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+                            <a href="https://tiktok.com/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="TikTok"><i class="fa-brands fa-tiktok"></i></a>
+                            <a href="https://threads.net/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="Threads"><i class="fa-brands fa-threads"></i></a>
+                            <a href="https://discord.gg/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
+                            <a href="https://telegram.org/alsyundawy" target="_blank" rel="noopener"
+                                aria-label="Telegram"><i class="fa-brands fa-telegram"></i></a>
+                            <a href="https://wa.me/+628568515212" target="_blank" rel="noopener"
+                                aria-label="WhatsApp"><i class="fa-brands fa-whatsapp"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+    <button id="scrollToTop" class="scroll-top-btn" aria-label="Scroll to top"><i
+            class="fa-solid fa-circle-arrow-up"></i></button>
+
+	
+	<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+
+
+	
+
+
+<script>console.log("ALSYUNDAWY Looking Glass Network Tools CopyLeft © 2025-2026 | ALSYUNDAWY IT SOLUTION | AS696969 | DESIGN OLEH HARRY DERTIN SUTISNA ALSYUNDAWY | https://github.com/alsyundawy");!function(){const t=document.documentElement,e=document.getElementById("themeToggle"),n=e.querySelector("i"),o=document.getElementById("scrollToTop"),a=document.getElementById("progressLoader"),r=()=>{const t="dark"===document.documentElement.getAttribute("data-theme");n.classList.toggle("fa-sun",t),n.classList.toggle("fa-moon",!t)};e.addEventListener("click",()=>{const e="dark"===t.getAttribute("data-theme")?"light":"dark";t.setAttribute("data-theme",e),localStorage.setItem("theme",e),document.cookie=`theme=${e};path=/;max-age=31536000`,r()}),window.addEventListener("scroll",()=>{o.style.display=window.scrollY>300?"block":"none"}),o.addEventListener("click",t=>{t.preventDefault(),window.scrollTo({top:0,behavior:"smooth"})}),r();const c=async(t,e,n)=>{try{const o=await fetch(e,{signal:AbortSignal.timeout(4e3)});if(!o.ok)throw new Error("Network error");const a=await o.json();document.getElementById(t).textContent=a.ip}catch(e){document.getElementById(t).textContent=n}};Promise.allSettled([c("clientIPv4","https://api.ipify.org?format=json","N/A"),c("clientIPv6","https://api6.ipify.org?format=json","N/A")]),$(".network-test-form").on("submit",async function(t){t.preventDefault();const e=$(this),n=e.find("input[name=host]").val().trim();if(!n)return alert("Host or IP address required"),void e.find("input[name=host]").focus();let o=e.find("input[name=cmd]").val();const r=e.find("select[name=ipversion]");r.length&&"6"===r.val()&&(o+="6");const c=e.closest(".tab-pane").find(".output-section"),s=c.find(".output-box");c.removeClass("show"),c.find(".alert-error").hide(),s.text("Running command..."),a.classList.add("active");const i=["ping","ping6","traceroute","traceroute6","mtr","mtr6"].includes(o);try{const t=new FormData;t.append("host",n),t.append("cmd",o),t.append("csrf",e.find("input[name=csrf]").val());const r=await fetch(window.location.pathname,{method:"POST",headers:{"X-Requested-With":"XMLHttpRequest"},body:t});a.classList.remove("active"),c.addClass("show"),s.text("");if(i){const t=r.body.getReader(),e=new TextDecoder;for(;;){const{done:n,value:o}=await t.read();if(n)break;const a=e.decode(o,{stream:!0});s.append(document.createTextNode(a)),$("html,body").animate({scrollTop:c.offset().top-80},0)}}else{const t=await r.text();s.text(t),$((html,body)).animate({scrollTop:c.offset().top-80},400)}}catch(t){a.classList.remove("active");let e=`Error: ${t.message||"Unknown error"}`;c.find(".alert-error").text(e).show(),c.addClass("show")}}),$(".reset-tab-btn").on("click",function(){const t=$(this).closest(".tab-pane");t.find("form")[0].reset(),t.find(".output-section").removeClass("show"),t.find(".alert-error").hide(),t.find(".output-box").text("")})}();</script>
+	
+
+
+
+
+</body>
+
+</html>
