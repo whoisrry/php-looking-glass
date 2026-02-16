@@ -13,7 +13,7 @@
 [![GitHub Contributors](https://img.shields.io/github/contributors/alsyundawy/php-looking-glass?style=social)](https://github.com/alsyundawy/php-looking-glass/graphs/contributors)
 
 ## Grafik Stargazers dari waktu ke waktu
-[![Stargazers over time](https://starchart.cc/alsyundawy/php-looking-glass.svg?variant=adaptive)](https://starchart.cc/alsyundawy/php-looking-glass)
+[![Stargazers over time](https://starchart.cc/alsyundawy/php-looking-glass.svg?variant=dark)](https://starchart.cc/alsyundawy/php-looking-glass)
 
 **Alat Looking Glass PHP yang profesional, ringan, dan dikemas dalam satu berkas—dirancang untuk diagnostik jaringan. Kompatibel penuh dengan IPv4 dan IPv6, menampilkan UI modern responsif (mode Gelap/Terang) dan memanfaatkan utilitas sistem standar.**
 

@@ -13,7 +13,7 @@
 [![GitHub Contributors](https://img.shields.io/github/contributors/alsyundawy/php-looking-glass?style=social)](https://github.com/alsyundawy/php-looking-glass/graphs/contributors)
 
 ## Stargazers over time
-[![Stargazers over time](https://starchart.cc/alsyundawy/php-looking-glass.svg?variant=adaptive)](https://starchart.cc/alsyundawy/php-looking-glass)
+[![Stargazers over time](https://starchart.cc/alsyundawy/php-looking-glass.svg?variant=dark)](https://starchart.cc/alsyundawy/php-looking-glass)
 
 **A professional, lightweight, single-file PHP Looking Glass tool designed for network diagnostics. Fully compatible with IPv4 and IPv6, featuring a modern, responsive UI (Dark/Light mode) and utilizing standard system utilities.**
 
