@@ -9,7 +9,7 @@
  * @author      : Harry Dertin Sutisna Alsyundawy <alsyundawy@gmail.com>
  * @copyright   : Copyleft 2026 Alsyundawy IT Solution
  * @license     : MIT License
- * @link        : https://github.com/alsyundawy/alsyundawy-looking-glass
+ * @link        : https://github.com/alsyundawy/php-looking-glass
  * @created     : February 16, 2026
  * 
  * DESCRIPTION:
@@ -439,7 +439,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 				'@type' => 'Organization',
 				'name' => 'ALSYUNDAWY IT SOLUTION',
 				'url' => 'https://alsyundawy.com',
-				'telephone' => '+62-812-9898-6464',
+				'telephone' => '+62-812-6969-6969',
 				'email' => 'noc@alsyundawy.com',
 				'sameAs' => [
 					'https://alsyundawy.com',
@@ -449,14 +449,14 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 					[
 						'@type' => 'ContactPoint',
 						'email' => 'noc@alsyundawy.com',
-						'telephone' => '+62-812-9898-6464',
+						'telephone' => '+62-812-6969-6969',
 						'contactType' => 'Network Operations',
 						'availableLanguage' => ['English', 'Indonesian']
 					],
 					[
 						'@type' => 'ContactPoint',
 						'email' => 'abuse@alsyundawy.com',
-						'telephone' => '+62-812-9898-6464',
+						'telephone' => '+62-812-6969-6969',
 						'contactType' => 'Abuse',
 						'availableLanguage' => ['English', 'Indonesian']
 					]
@@ -502,7 +502,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 				],
 				'contactPoint' => [
 					'@type' => 'ContactPoint',
-					'telephone' => '+62-812-9898-6464',
+					'telephone' => '+62-812-6969-6969',
 					'email' => 'noc@alsyundawy.com',
 					'contactType' => 'Customer Support'
 				]
@@ -544,14 +544,14 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 			'contactPoint' => [
 				[
 					'@type' => 'ContactPoint',
-					'telephone' => '+62-812-9898-6464',
+					'telephone' => '+62-812-6969-6969',
 					'email' => 'noc@alsyundawy.com',
 					'contactType' => 'NOC',
 					'availableLanguage' => ['English', 'Indonesian']
 				],
 				[
 					'@type' => 'ContactPoint',
-					'telephone' => '+62-812-9898-6464',
+					'telephone' => '+62-812-6969-6969',
 					'email' => 'abuse@alsyundawy.com',
 					'contactType' => 'Abuse',
 					'availableLanguage' => ['English', 'Indonesian']
@@ -619,18 +619,18 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
                         <span class="header__title">Looking Glass <span class="highlight2">Network Tools</span></span>
                     </div>
                     <div class="contact-info">
-                        <span><i class="fa-solid fa-phone-alt"></i> +62-812-9898-6464</span>
+                        <span><i class="fa-solid fa-phone-alt"></i> +62-812-6969-6969</span>
                         <span>|</span>
                         <span><i class="fa-solid fa-envelope"></i> <a
                                 href="mailto:info@alsyundawy.com">info@alsyundawy.com</a></span>
                         <span>|</span>
-                        <span><i class="fa-brands fa-whatsapp"></i> +62-856-8-515-212</span>
+                        <span><i class="fa-brands fa-whatsapp"></i> +62-812-6969-6969</span>
                         <span>|</span>
                         <span><i class="fa-solid fa-globe"></i> <a href="https://www.alsyundawy.com" target="_blank"
                                 rel="noopener">www.alsyundawy.com</a></span>
                     </div>
                     <div class="contact-info-mobile">
-                        <a href="tel:+62-812-9898-6464" aria-label="Phone"><i class="fa-solid fa-phone-alt"></i></a>
+                        <a href="tel:+62-812-6969-6969" aria-label="Phone"><i class="fa-solid fa-phone-alt"></i></a>
                         <a href="mailto:info@alsyundawy.com" aria-label="Email"><i class="fa-solid fa-envelope"></i></a>
                         <a href="https://wa.me/628551838615" target="_blank" rel="noopener" aria-label="WhatsApp"><i
                                 class="fa-brands fa-whatsapp"></i></a>
@@ -659,7 +659,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
 						</li>
 
 						<li class="nav-item">
-							<a href="https://wa.me/628568515212" target="_blank" rel="noopener">
+							<a href="https://wa.me/62-812-6969-6969" target="_blank" rel="noopener">
 								<i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span>
 							</a>
 						</li>
@@ -1004,7 +1004,7 @@ if (isset($_COOKIE['theme']) && in_array($_COOKIE['theme'], ['light', 'dark'], t
                                 aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
                             <a href="https://telegram.org/alsyundawy" target="_blank" rel="noopener"
                                 aria-label="Telegram"><i class="fa-brands fa-telegram"></i></a>
-                            <a href="https://wa.me/+628568515212" target="_blank" rel="noopener"
+                            <a href="https://wa.me/+62-812-6969-6969" target="_blank" rel="noopener"
                                 aria-label="WhatsApp"><i class="fa-brands fa-whatsapp"></i></a>
                         </div>
                     </div>
