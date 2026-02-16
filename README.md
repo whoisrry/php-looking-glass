@@ -15,7 +15,7 @@
 ## Stargazers over time
 [![Stargazers over time](https://starchart.cc/alsyundawy/php-looking-glass.svg?variant=adaptive)](https://starchart.cc/alsyundawy/php-looking-glass)
 
-A professional, lightweight, single-file PHP Looking Glass tool designed for network diagnostics. Fully compatible with IPv4 and IPv6, featuring a modern, responsive UI (Dark/Light mode) and utilizing standard system utilities.
+**A professional, lightweight, single-file PHP Looking Glass tool designed for network diagnostics. Fully compatible with IPv4 and IPv6, featuring a modern, responsive UI (Dark/Light mode) and utilizing standard system utilities.**
 
 ![looking-glass](/php-looking-glass.png)
 
