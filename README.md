@@ -1,6 +1,19 @@
 # Alsyundawy PHP Looking Glass
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![PHP](https://img.shields.io/badge/php-%3E%3D8.1-777bb4.svg)
+[![Latest Version](https://img.shields.io/github/v/release/alsyundawy/php-looking-glass)](https://github.com/alsyundawy/php-looking-glass/releases)
+[![Maintenance Status](https://img.shields.io/maintenance/yes/9999)](https://github.com/alsyundawy/php-looking-glass/)
+[![License](https://img.shields.io/github/license/alsyundawy/php-looking-glass)](https://github.com/alsyundawy/php-looking-glass/blob/master/LICENSE)
+[![GitHub Issues](https://img.shields.io/github/issues/alsyundawy/php-looking-glass)](https://github.com/alsyundawy/php-looking-glass/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/alsyundawy/php-looking-glass)](https://github.com/alsyundawy/php-looking-glass/pulls)
+[![Donate with PayPal](https://img.shields.io/badge/PayPal-donate-orange)](https://www.paypal.me/alsyundawy)
+[![Sponsor with GitHub](https://img.shields.io/badge/GitHub-sponsor-orange)](https://github.com/sponsors/alsyundawy)
+[![GitHub Stars](https://img.shields.io/github/stars/alsyundawy/php-looking-glass?style=social)](https://github.com/alsyundawy/php-looking-glass/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/alsyundawy/php-looking-glass?style=social)](https://github.com/alsyundawy/php-looking-glass/network/members)
+[![GitHub Contributors](https://img.shields.io/github/contributors/alsyundawy/php-looking-glass?style=social)](https://github.com/alsyundawy/php-looking-glass/graphs/contributors)
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/alsyundawy/php-looking-glass.svg?variant=adaptive)](https://starchart.cc/alsyundawy/php-looking-glass)
 
 A professional, lightweight, single-file PHP Looking Glass tool designed for network diagnostics. Fully compatible with IPv4 and IPv6, featuring a modern, responsive UI (Dark/Light mode) and utilizing standard system utilities.
 
