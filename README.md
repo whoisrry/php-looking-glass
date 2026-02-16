@@ -17,6 +17,17 @@
 
 A professional, lightweight, single-file PHP Looking Glass tool designed for network diagnostics. Fully compatible with IPv4 and IPv6, featuring a modern, responsive UI (Dark/Light mode) and utilizing standard system utilities.
 
+
+**Anda bebas untuk mengubah, mendistribusikan script ini untuk keperluan anda**
+
+**If you find this project helpful and would like to support it, please consider donating via https://www.paypal.me/alsyundawy. Thank you for your support!**
+
+**Jika Anda merasa terbantu dan ingin mendukung proyek ini, pertimbangkan untuk berdonasi melalui https://www.paypal.me/alsyundawy. Terima kasih atas dukungannya!**
+
+**Jika Anda merasa terbantu dan ingin mendukung proyek ini, pertimbangkan untuk berdonasi melalui QRIS. Terima kasih atas dukungannya!**
+** QRIS **
+<img width="508" height="574" alt="image" src="https://github.com/user-attachments/assets/a0126f28-6dde-43da-ba14-d7c9a27de0df" />
+
 ## Features
 
 - **Network Diagnostics**: Ping, Traceroute, MTR (My Traceroute), and Host (DNS Lookup).
