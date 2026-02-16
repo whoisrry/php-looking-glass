@@ -1,4 +1,4 @@
-# Alsyundawy Looking Glass
+# Alsyundawy PHP Looking Glass
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![PHP](https://img.shields.io/badge/php-%3E%3D8.1-777bb4.svg)
 
