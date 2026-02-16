@@ -66,7 +66,7 @@ server {
     
     server_name lg.yourdomain.com;
     root /var/www/html/lg;
-    index ALSYUNDAWY-LG-GITHUB-2026.php;
+    index index.php;
 
     # =========================================================================
     # PERFORMANCE & TIMEOUTS
@@ -378,7 +378,7 @@ Open the PHP file in a text editor and modify the top section to match your serv
 // ========================================================================
 
 $siteName = 'ALSYUNDAWY IT SOLUTION'; // Your Site/Company Name
-$siteUrl = 'https://lg.alsyundawy.com'; // Your LG URL
+$siteUrl = 'https://lg.yourdomain.com'; // Your LG URL
 
 // Server Location
 $serverLocation = 'DKI Jakarta, Indonesia';
@@ -447,4 +447,4 @@ dd if=/dev/zero of=1GB.bin bs=1M count=1024 status=progress
 
 ## License
 
-MIT License. Copyright (c) 2026 Alsyundawy IT Solution.
+## MIT License. Copyright (c) 2026 Alsyundawy IT Solution.
